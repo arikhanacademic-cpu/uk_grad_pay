@@ -1,0 +1,106 @@
+key,subject,yag,median,grads
+Medicine and dentistry|5,Medicine and dentistry,5,53300,8460
+"Pharmacology, toxicology and pharmacy|5","Pharmacology, toxicology and pharmacy",5,39100,3380
+Nursing and midwifery|5,Nursing and midwifery,5,34300,24215
+Medical sciences|5,Medical sciences,5,38300,3620
+Allied health|5,Allied health,5,32500,10420
+Biosciences|5,Biosciences,5,31000,12715
+Sport and exercise sciences|5,Sport and exercise sciences,5,28500,10700
+Psychology|5,Psychology,5,28100,15190
+Veterinary sciences|5,Veterinary sciences,5,40500,1100
+"Agriculture, food and related studies|5","Agriculture, food and related studies",5,27700,2285
+Physics and astronomy|5,Physics and astronomy,5,40500,3705
+Chemistry|5,Chemistry,5,35400,3960
+"General, applied and forensic sciences|5","General, applied and forensic sciences",5,28800,1935
+Mathematical sciences|5,Mathematical sciences,5,41200,6965
+Engineering|5,Engineering,5,41200,16060
+Materials and technology|5,Materials and technology,5,31800,1405
+Computing|5,Computing,5,38300,13315
+"Architecture, building and planning|5","Architecture, building and planning",5,36500,5440
+"Sociology, social policy and anthropology|5","Sociology, social policy and anthropology",5,28100,12300
+Economics|5,Economics,5,50000,6050
+Politics|5,Politics,5,35000,5940
+Health and social care|5,Health and social care,5,28500,6595
+Law|5,Law,5,32500,12830
+Business and management|5,Business and management,5,33200,38365
+English studies|5,English studies,5,28800,12795
+Celtic studies|5,Celtic studies,5,29200,105
+Languages and area studies|5,Languages and area studies,5,33600,6150
+History and archaeology|5,History and archaeology,5,31000,13070
+Philosophy and religious studies|5,Philosophy and religious studies,5,31800,3575
+Education and teaching|5,Education and teaching,5,28100,16520
+Combined and general studies|5,Combined and general studies,5,28800,4580
+"Media, journalism and communications|5","Media, journalism and communications",5,27400,8785
+Creative arts and design|5,Creative arts and design,5,25600,22085
+Performing arts|5,Performing arts,5,24800,11090
+"Geography, earth and environmental studies|5","Geography, earth and environmental studies",5,33200,8875
+Medicine and dentistry|3,Medicine and dentistry,3,49600,8475
+"Pharmacology, toxicology and pharmacy|3","Pharmacology, toxicology and pharmacy",3,34300,3110
+Nursing and midwifery|3,Nursing and midwifery,3,33600,23775
+Medical sciences|3,Medical sciences,3,34700,3765
+Allied health|3,Allied health,3,30700,11560
+Biosciences|3,Biosciences,3,27000,13065
+Sport and exercise sciences|3,Sport and exercise sciences,3,25200,10355
+Psychology|3,Psychology,3,25200,16185
+Veterinary sciences|3,Veterinary sciences,3,37600,1275
+"Agriculture, food and related studies|3","Agriculture, food and related studies",3,25600,2330
+Physics and astronomy|3,Physics and astronomy,3,34700,3650
+Chemistry|3,Chemistry,3,31000,4070
+"General, applied and forensic sciences|3","General, applied and forensic sciences",3,25900,1905
+Mathematical sciences|3,Mathematical sciences,3,34700,6770
+Engineering|3,Engineering,3,35400,17545
+Materials and technology|3,Materials and technology,3,29200,1055
+Computing|3,Computing,3,32800,14340
+"Architecture, building and planning|3","Architecture, building and planning",3,34300,6135
+"Sociology, social policy and anthropology|3","Sociology, social policy and anthropology",3,25600,13455
+Economics|3,Economics,3,37200,6880
+Politics|3,Politics,3,29600,7035
+Health and social care|3,Health and social care,3,27400,6535
+Law|3,Law,3,27000,13650
+Business and management|3,Business and management,3,28500,40730
+English studies|3,English studies,3,25600,11600
+Celtic studies|3,Celtic studies,3,27000,95
+Languages and area studies|3,Languages and area studies,3,28800,5735
+History and archaeology|3,History and archaeology,3,26600,12810
+Philosophy and religious studies|3,Philosophy and religious studies,3,27700,3700
+Education and teaching|3,Education and teaching,3,26300,14455
+Combined and general studies|3,Combined and general studies,3,27000,3240
+"Media, journalism and communications|3","Media, journalism and communications",3,24500,8770
+Creative arts and design|3,Creative arts and design,3,23000,22110
+Performing arts|3,Performing arts,3,21900,11145
+"Geography, earth and environmental studies|3","Geography, earth and environmental studies",3,28500,8840
+Medicine and dentistry|1,Medicine and dentistry,1,40500,8590
+"Pharmacology, toxicology and pharmacy|1","Pharmacology, toxicology and pharmacy",1,27900,3075
+Nursing and midwifery|1,Nursing and midwifery,1,31400,21145
+Medical sciences|1,Medical sciences,1,26300,8795
+Allied health|1,Allied health,1,26300,9070
+Biosciences|1,Biosciences,1,23000,10150
+Sport and exercise sciences|1,Sport and exercise sciences,1,20800,9745
+Psychology|1,Psychology,1,21500,17960
+Veterinary sciences|1,Veterinary sciences,1,33200,1275
+"Agriculture, food and related studies|1","Agriculture, food and related studies",1,22300,2110
+Physics and astronomy|1,Physics and astronomy,1,28500,3695
+Chemistry|1,Chemistry,1,26300,3605
+"General, applied and forensic sciences|1","General, applied and forensic sciences",1,22600,2340
+Mathematical sciences|1,Mathematical sciences,1,28100,7340
+Engineering|1,Engineering,1,30300,18340
+Materials and technology|1,Materials and technology,1,25900,1030
+Computing|1,Computing,1,28500,15565
+"Architecture, building and planning|1","Architecture, building and planning",1,28500,7035
+"Sociology, social policy and anthropology|1","Sociology, social policy and anthropology",1,21900,13860
+Economics|1,Economics,1,29600,8210
+Politics|1,Politics,1,25200,7535
+Health and social care|1,Health and social care,1,24100,9285
+Law|1,Law,1,23000,16160
+Business and management|1,Business and management,1,25200,44540
+English studies|1,English studies,1,21500,10910
+Celtic studies|1,Celtic studies,1,23000,85
+Languages and area studies|1,Languages and area studies,1,24800,5435
+History and archaeology|1,History and archaeology,1,22600,11900
+Philosophy and religious studies|1,Philosophy and religious studies,1,23400,3300
+Education and teaching|1,Education and teaching,1,24500,12265
+Combined and general studies|1,Combined and general studies,1,24100,4395
+"Media, journalism and communications|1","Media, journalism and communications",1,21200,6895
+Creative arts and design|1,Creative arts and design,1,20400,21995
+Performing arts|1,Performing arts,1,18300,10550
+"Geography, earth and environmental studies|1","Geography, earth and environmental studies",1,24500,7865

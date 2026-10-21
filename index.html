@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>UK graduate pay, as a landscape</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏔️</text></svg>">
+<style>
+/* Design tokens (the page was first built for Claude's dashboard runtime; these stand in for it) */
+:root {
+  color-scheme: light;
+  --font-anthropic-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-anthropic-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --color-fg: #1d2330; --color-fg-muted: #5f6878; --color-bg: #f7f8fa; --color-panel: #ffffff;
+  --color-border-line: #dde1e8; --color-ok: #17804a; --color-bad: #c0392b;
+  --sm-accent-token: #3b5bdb;
+  --cds-chart-muted: #b9c0cc; --cds-text-secondary: #5f6878;
+  --cds-surface-popover: #ffffff; --cds-border: #dde1e8; --cds-shadow-popover: 0 6px 24px rgba(20, 30, 50, .14);
+  --cds-gap-xs: 6px; --cds-gap-sm: 10px; --cds-gap-md: 16px; --cds-gap-lg: 28px;
+  --cds-pad-xs: 6px; --cds-pad-sm: 10px; --cds-pad-md: 16px; --cds-pad-lg: 20px;
+  --cds-radius: 12px;
+  --cds-font-size-caption: .8125rem; --cds-font-size-body: 1rem; --cds-font-size-heading: 1.0625rem; --cds-font-size-title: 1.5rem;
+  --cds-font-weight-medium: 600;
+  --cds-dur-slow: 400ms; --cds-ease-out: cubic-bezier(.2, .7, .2, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-fg: #e8ebf1; --color-fg-muted: #9aa3b2; --color-bg: #0f1218; --color-panel: #171b23;
+    --color-border-line: #2a303b; --color-ok: #4cc38a; --color-bad: #ff7a6b;
+    --sm-accent-token: #7aa2ff;
+    --cds-chart-muted: #444c5a; --cds-text-secondary: #9aa3b2;
+    --cds-surface-popover: #1d222c; --cds-border: #2f3642; --cds-shadow-popover: 0 8px 28px rgba(0, 0, 0, .5);
+  }
+}
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--color-bg); color: var(--color-fg); font-family: var(--font-anthropic-sans);
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+#dash-root { --dash-gutter: clamp(12px, 3vw, 32px); padding: 24px var(--dash-gutter) 48px; }
+.dash-skeleton { background: color-mix(in srgb, var(--color-fg) 6%, transparent); }
+.sm-load-error { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script>
+/* Tiny stand-in for the dashboard runtime: loads the files in data/ and hands rows to the page. */
+(() => {
+  const FILES = {
+    earnings: 'data/leo_earnings_2022-23.csv',
+    national: 'data/leo_national_2022-23.csv',
+    campuses: 'data/campus_positions.csv',
+    uk_outline: 'data/uk_outline.json'
+  };
+  const store = {}, calcs = {}, subs = [];
+  for (const id of Object.keys(FILES)) store[id] = { status: 'loading', data: [] };
+  const fire = () => subs.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
+  window.dash = {
+    colors: ['var(--sm-accent-token)'],
+    data(id) {
+      if (store[id]) return store[id];
+      const c = calcs[id];
+      if (!c) return { status: 'missing', data: [] };
+      const ins = c.inputs.map((i) => window.dash.data(i));
+      if (ins.some((d) => d.status !== 'ok')) return { status: 'loading', data: [] };
+      if (!c.cache) c.cache = c.fn(...ins.map((d) => d.data));
+      return { status: 'ok', data: c.cache };
+    },
+    calc(id, def) { calcs[id] = { ...def }; },
+    onData(fn) { subs.push(fn); fn(); }
+  };
+  const load = (id, url) => (url.endsWith('.json') ? d3.json(url) : d3.csv(url))
+    .then((rows) => { store[id] = { status: 'ok', data: rows }; })
+    .catch((err) => { store[id] = { status: 'error', data: [], message: String(err) }; });
+  Promise.all(Object.entries(FILES).map(([id, url]) => load(id, url))).then(() => {
+    if (Object.values(store).some((s) => s.status === 'error')) {
+      const box = document.getElementById('mapbox');
+      if (box) {
+        const msg = document.createElement('p');
+        msg.className = 'sm-load-error';
+        msg.textContent = location.protocol === 'file:'
+          ? 'The data files can’t load when this page is opened straight from your computer. Run “python -m http.server” in this folder and open http://localhost:8000, or view it on GitHub Pages.'
+          : 'The data files in data/ didn’t load. Check they were uploaded alongside index.html.';
+        box.appendChild(msg);
+      }
+    }
+    fire();
+  });
+  let t = 0;
+  window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(fire, 120); });
+})();
+</script>
+</head>
+<body>
+<div id="dash-root">
+<div class="sm-page">
+  <header class="sm-head" id="top">
+    <h1 class="sm-title">UK graduate pay, as a landscape</h1>
+    <p class="sm-takeaway" id="takeaway">
+      <span class="sm-tk-lead">—</span>
+      <span class="sm-tk-body" hidden>median pay ranges from
+        <b class="sm-num" data-source="earnings" data-field="median" id="tk-lo-val">—</b>
+        at <span data-source="earnings" data-field="university" id="tk-lo-name">—</span>
+        to <b class="sm-num" data-source="earnings" data-field="median" id="tk-hi-val">—</b>
+        at <span data-source="earnings" data-field="university" id="tk-hi-name">—</span>.</span>
+    </p>
+  </header>
+
+  <section class="sm-controls" aria-label="Choose a degree">
+    <div class="sm-chips" id="chips" role="radiogroup" aria-label="Degree"></div>
+    <div class="sm-row">
+      <label class="sm-field">
+        <span>More subjects</span>
+        <select id="more-subjects" data-source="national"><option value="">Pick another subject</option></select>
+      </label>
+      <label class="sm-field">
+        <span>Find a university</span>
+        <select id="find-uni" data-source="campuses"><option value="">Jump to…</option></select>
+      </label>
+      <div class="sm-seg" role="radiogroup" aria-label="Colour spikes by">
+        <button type="button" class="sm-seg-btn" data-mode="pay" aria-pressed="true">Pay</button>
+        <button type="button" class="sm-seg-btn" data-mode="vs" aria-pressed="false">Vs UK average</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="sm-mapcard" id="map">
+    <div class="sm-mapbox dash-skeleton" id="mapbox" data-source="earnings campuses uk_outline vs_national">
+      <canvas id="cv" aria-label="3D map of the UK with a spike for each university; taller spikes mean higher median pay"></canvas>
+      <div class="sm-tip" id="tip" hidden></div>
+      <div class="sm-mapui sm-mapui-top">
+        <p class="sm-hint">Drag to spin. Pinch or Ctrl-scroll to zoom. Two fingers or Shift-drag to move. Tap a spike.</p>
+        <div class="sm-zoom">
+          <button type="button" id="zin" aria-label="Zoom in">+</button>
+          <button type="button" id="zout" aria-label="Zoom out">−</button>
+          <button type="button" id="zreset" aria-label="Reset view" class="sm-reset">Reset</button>
+        </div>
+      </div>
+      <div class="sm-legend" id="legend"></div>
+      <div class="sm-career" id="career">
+        <button type="button" class="sm-play" id="play" aria-label="Play career growth">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>
+        </button>
+        <div class="sm-steps" role="radiogroup" aria-label="Years after graduating">
+          <div class="sm-track"><div class="sm-track-fill" id="trackfill"></div></div>
+          <button type="button" class="sm-step" data-yag="1">1 year</button>
+          <button type="button" class="sm-step" data-yag="3">3 years</button>
+          <button type="button" class="sm-step" data-yag="5">5 years</button>
+        </div>
+        <span class="sm-career-label">after graduating</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="sm-grid">
+    <article class="sm-card sm-info" id="selected-uni">
+      <h2 class="sm-card-title">Selected university</h2>
+      <p class="sm-empty" id="info-empty">Tap a spike on the map or a row in the ranking.</p>
+      <div id="info-body" hidden>
+        <p class="sm-uni" id="info-name" data-source="earnings" data-field="university">—</p>
+        <p class="sm-sub" id="info-sub">—</p>
+        <p class="sm-big" id="info-median" data-source="earnings" data-field="median">—</p>
+        <p class="sm-line">Middle half of graduates earn
+          <span class="sm-num" id="info-lq" data-source="earnings" data-field="lq">—</span> to
+          <span class="sm-num" id="info-uq" data-source="earnings" data-field="uq">—</span></p>
+        <p class="sm-line"><span class="sm-delta" id="info-diff" data-source="vs_national" data-field="diff_pct">—</span>
+          against the UK median of <span class="sm-num" id="info-nat" data-source="national" data-field="median">—</span></p>
+        <p class="sm-line sm-muted">Based on <span class="sm-num" id="info-grads" data-source="earnings" data-field="grads">—</span> graduates</p>
+        <div class="sm-careerstrip" id="info-career" aria-label="Median pay by years after graduating"></div>
+        <div class="sm-rival" id="info-rival" hidden>
+          <p class="sm-rival-head">Across town</p>
+          <p class="sm-rival-row"><span id="rival-name" data-source="earnings" data-field="university">—</span>
+            <b class="sm-num" id="rival-median" data-source="earnings" data-field="median">—</b></p>
+        </div>
+      </div>
+    </article>
+
+    <article class="sm-card" id="ranking">
+      <h2 class="sm-card-title" id="rank-title">Every university, highest pay first</h2>
+      <p class="sm-note">Median pay. Bars share one scale across all subjects.</p>
+      <div class="sm-tablebox">
+        <table class="sm-table" id="rank-table" data-source="earnings" data-row-key="key">
+          <thead><tr>
+            <th scope="col" data-field="university">University</th>
+            <th scope="col" data-field="median" class="sm-r">Median</th>
+            <th scope="col" data-source="vs_national" data-field="diff_pct" class="sm-r">Vs UK</th>
+            <th scope="col" data-field="grads" class="sm-r sm-hide-narrow">Grads</th>
+          </tr></thead>
+          <tbody id="rank-body"></tbody>
+        </table>
+      </div>
+    </article>
+  </section>
+
+  <section class="sm-notes" id="notes">
+    <h2 class="sm-card-title">How to read this</h2>
+    <p>Spike height is the median annual pay of UK-domiciled first-degree graduates in the 2022–23 tax year, from the Department for Education’s LEO graduate outcomes data. Heights use one scale for every subject, so switching degree shows real differences.</p>
+    <p>The career steps compare three different graduating classes measured in the same tax year (graduated 2020–21, 2018–19 and 2016–17), not one group followed over time.</p>
+    <p>A missing spike means the course was too small for the government to publish earnings. Pay reflects where graduates work (London salaries are higher), their backgrounds and entry grades, not only the teaching. Accounting and finance are counted inside Business and management in this data. Distance and multi-site providers (the Open University, University of London, BPP, University of Law, UCEM) are left off the map.</p>
+    <p>Spike positions are approximate main-campus locations.</p>
+  </section>
+</div>
+
+<style>
+.sm-page { font-family: var(--font-anthropic-sans); color: var(--color-fg); max-width: 1180px; margin-inline: auto; display: grid; gap: var(--cds-gap-lg); }
+.sm-head { display: grid; gap: var(--cds-gap-xs); }
+.sm-title { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: clamp(1.7rem, 4.5vw, 2.6rem); line-height: 1.1; margin: 0; letter-spacing: -0.01em; }
+.sm-takeaway { margin: 0; font-size: var(--cds-font-size-body); color: var(--color-fg-muted); max-width: 70ch; line-height: 1.5; }
+.sm-takeaway .sm-tk-lead { color: var(--color-fg); }
+.sm-page b.sm-num, .sm-num { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--color-fg); }
+
+.sm-controls { display: grid; gap: var(--cds-gap-md); }
+.sm-chips { display: flex; gap: var(--cds-gap-xs); overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.sm-chip { flex: none; font: inherit; font-size: var(--cds-font-size-caption); padding: 7px 13px; border-radius: 999px; border: 1px solid var(--color-border-line); background: var(--color-panel); color: var(--color-fg); cursor: pointer; white-space: nowrap; }
+.sm-chip[aria-checked="true"] { background: var(--color-fg); color: var(--color-bg); border-color: var(--color-fg); }
+.sm-chip:focus-visible, .sm-seg-btn:focus-visible, .sm-step:focus-visible, .sm-play:focus-visible, .sm-zoom button:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+.sm-row { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); align-items: end; }
+.sm-field { display: grid; gap: 4px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); min-width: min(100%, 14rem); flex: 1 1 14rem; }
+.sm-field select { font: inherit; font-size: var(--cds-font-size-body); color: var(--color-fg); background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: 7px 10px; width: 100%; }
+.sm-seg { display: inline-flex; border: 1px solid var(--color-border-line); border-radius: 999px; padding: 3px; background: var(--color-panel); flex: none; }
+.sm-seg-btn { font: inherit; font-size: var(--cds-font-size-caption); border: 0; background: transparent; color: var(--color-fg-muted); padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+.sm-seg-btn[aria-pressed="true"] { background: var(--color-fg); color: var(--color-bg); }
+
+.sm-mapcard { margin-inline: calc(-1 * var(--dash-gutter)); }
+.sm-mapbox { position: relative; height: clamp(440px, 72vh, 760px); border-radius: 0; overflow: hidden; background: var(--color-bg); border-block: 1px solid var(--color-border-line); }
+@media (min-width: 900px) { .sm-mapcard { margin-inline: 0; } .sm-mapbox { border-radius: var(--cds-radius); border: 1px solid var(--color-border-line); } }
+.sm-mapbox canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; display: block; }
+.sm-mapbox canvas:active { cursor: grabbing; }
+.sm-mapbox[data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+.sm-mapui { position: absolute; left: 0; right: 0; display: flex; justify-content: space-between; gap: var(--cds-gap-sm); padding: var(--cds-pad-sm) var(--cds-pad-md); pointer-events: none; }
+.sm-mapui-top { top: 0; align-items: flex-start; }
+.sm-hint { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); max-width: 30ch; line-height: 1.4; }
+.sm-zoom { display: flex; gap: 6px; pointer-events: auto; }
+.sm-zoom button { font: inherit; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--color-border-line); background: var(--color-panel); color: var(--color-fg); cursor: pointer; font-size: 1.1rem; line-height: 1; }
+.sm-zoom .sm-reset { width: auto; border-radius: 999px; padding: 0 12px; font-size: var(--cds-font-size-caption); }
+.sm-legend { position: absolute; left: var(--cds-pad-md); bottom: 86px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); display: grid; gap: 4px; pointer-events: none; }
+.sm-legend .sm-ramp { width: 170px; height: 8px; border-radius: 4px; }
+.sm-legend .sm-ramp-labels { display: flex; justify-content: space-between; gap: 12px; width: 170px; }
+.sm-legend .sm-key { display: flex; align-items: center; gap: 6px; }
+.sm-legend .sm-sw { width: 10px; height: 10px; border-radius: 50%; }
+
+.sm-career { position: absolute; left: 50%; transform: translateX(-50%); bottom: var(--cds-pad-md); width: min(560px, calc(100% - 24px)); display: flex; align-items: center; gap: var(--cds-gap-sm); padding: 8px 14px 8px 8px; border-radius: 999px; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); box-shadow: var(--cds-shadow-popover); }
+.sm-play { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--color-fg); color: var(--color-bg); display: grid; place-items: center; cursor: pointer; }
+.sm-steps { position: relative; flex: 1; display: flex; justify-content: space-between; align-items: center; min-height: 40px; }
+.sm-track { position: absolute; left: 22px; right: 22px; top: 50%; height: 3px; margin-top: -1.5px; background: var(--color-border-line); border-radius: 2px; }
+.sm-track-fill { height: 100%; width: 0; background: var(--color-fg); border-radius: 2px; transition: width var(--cds-dur-slow) var(--cds-ease-out); }
+.sm-step { position: relative; z-index: 1; font: inherit; font-size: var(--cds-font-size-caption); border: 1px solid var(--color-border-line); background: var(--color-panel); color: var(--color-fg-muted); border-radius: 999px; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
+.sm-step[aria-checked="true"] { background: var(--color-fg); color: var(--color-bg); border-color: var(--color-fg); }
+.sm-career-label { flex: none; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+@media (max-width: 520px) { .sm-career-label { display: none; } .sm-hint { max-width: 22ch; } .sm-legend { bottom: 78px; } }
+
+.sm-tip { position: absolute; z-index: 3; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); max-width: 220px; }
+.sm-tip .sm-tip-name { color: var(--cds-text-secondary); }
+.sm-tip .sm-tip-val { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.sm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: var(--cds-gap-md); align-items: start; }
+.sm-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: grid; gap: var(--cds-gap-sm); min-width: 0; }
+.sm-card-title { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+.sm-note, .sm-empty { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.sm-info #info-body { display: grid; gap: 6px; }
+.sm-uni { margin: 0; font-size: var(--cds-font-size-body); font-weight: 600; }
+.sm-sub { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.sm-big { margin: 4px 0; font-family: var(--font-anthropic-serif); font-weight: 400; font-size: clamp(2.2rem, 6vw, 3rem); line-height: 1; font-variant-numeric: tabular-nums; }
+.sm-line { margin: 0; font-size: var(--cds-font-size-caption); line-height: 1.5; }
+.sm-muted { color: var(--color-fg-muted); }
+.sm-delta { font-weight: 600; font-variant-numeric: tabular-nums; }
+.sm-delta.up { color: var(--color-ok); } .sm-delta.down { color: var(--color-bad); }
+.sm-careerstrip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: end; margin-top: 8px; height: 110px; }
+.sm-cs-col { display: grid; grid-template-rows: auto 1fr auto; height: 100%; gap: 4px; text-align: center; font-size: var(--cds-font-size-caption); }
+.sm-cs-val { font-variant-numeric: tabular-nums; font-weight: 600; }
+.sm-cs-barwrap { display: flex; align-items: end; justify-content: center; }
+.sm-cs-bar { width: 26px; border-radius: 4px 4px 1px 1px; background: var(--cds-chart-muted); }
+.sm-cs-col.on .sm-cs-bar { background: var(--sm-accent); }
+.sm-cs-lbl { color: var(--color-fg-muted); }
+.sm-rival { border-top: 1px solid var(--color-border-line); padding-top: 8px; margin-top: 6px; }
+.sm-rival-head { margin: 0 0 2px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.sm-rival-row { margin: 0; display: flex; justify-content: space-between; gap: 12px; font-size: var(--cds-font-size-caption); }
+
+.sm-tablebox { max-height: 460px; overflow: auto; margin-inline: calc(-1 * var(--cds-pad-sm)); }
+.sm-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+.sm-table th { position: sticky; top: 0; background: var(--color-panel); text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: 6px var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); z-index: 1; }
+.sm-table td { padding: 6px var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); vertical-align: middle; }
+.sm-table tbody tr { cursor: pointer; }
+.sm-table tbody tr:hover td { background: color-mix(in srgb, var(--color-fg) 5%, transparent); }
+.sm-table tbody tr.sel td { background: color-mix(in srgb, var(--color-fg) 9%, transparent); }
+.sm-table .sm-r { text-align: right; }
+.sm-cellbar { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
+.sm-cellbar i { display: block; height: 6px; border-radius: 3px; background: var(--sm-accent); justify-self: end; }
+.sm-table .up { color: var(--color-ok); } .sm-table .down { color: var(--color-bad); }
+@media (max-width: 520px) { .sm-hide-narrow { display: none; } }
+
+.sm-notes { display: grid; gap: var(--cds-gap-xs); max-width: 72ch; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); line-height: 1.55; }
+.sm-notes p { margin: 0; }
+[data-dash-source-state=empty] { color: transparent; }
+.sm-page [hidden] { display: none !important; }
+</style>
+
+<script>
+(() => {
+  const FEATURED = [
+    ['Computing', 'Computer science'], ['Economics', 'Economics'], ['Mathematical sciences', 'Maths'],
+    ['Business and management', 'Business, accounting & finance'], ['Law', 'Law'], ['Engineering', 'Engineering'],
+    ['Medicine and dentistry', 'Medicine'], ['Nursing and midwifery', 'Nursing'], ['Psychology', 'Psychology'],
+    ['English studies', 'English'], ['Creative arts and design', 'Creative arts']
+  ];
+  const YAGS = ['1', '3', '5'];
+  const PAY_TOP = 100000;            // spike scale: £100k = full height, same for every subject
+  const HEIGHT_KM = 330;             // drawn height of a £100k spike
+  const LON0 = -2.6, LAT0 = 54.4;
+  const KX = Math.cos(LAT0 * Math.PI / 180) * 111.32, KY = 110.57;
+  const HOME = { yaw: -0.18, pitch: 0.98, zoom: 1, cx: 0, cy: -40 };
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const $ = (id) => document.getElementById(id);
+  const gbp = (v) => '£' + d3.format(',')(v);
+  const signedPct = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '%';
+  const enc = (s) => String(s).replace(/%/g, '%25').replace(/&/g, '%26').replace(/=/g, '%3D');
+  const where = (key) => 'key=' + enc(key);
+  const subjLabel = (s) => (FEATURED.find((f) => f[0] === s) || [s, s])[1];
+  const yagText = (y) => y === '1' ? '1 year' : y + ' years';
+
+  // ---------- state ----------
+  const st = {
+    subject: 'Computing', yag: '5', mode: 'pay', selected: '10007798',
+    cam: { ...HOME }, shown: new Map(), alpha: new Map(), introDone: false,
+    tween: null, camTween: null, playing: false, hover: null
+  };
+  let idx = null;   // built from data
+  let colors = null;
+
+  // ---------- data indexing ----------
+  function build() {
+    const E = dash.data('earnings'), C = dash.data('campuses'), O = dash.data('uk_outline'), N = dash.data('national'), V = dash.data('vs_national');
+    if ([E, C, O, N].some((d) => d.status !== 'ok')) return null;
+    const camp = new Map();
+    for (const r of C.data) {
+      const lat = Number(r.lat), lon = Number(r.lon);
+      camp.set(String(r.ukprn), { ukprn: String(r.ukprn), short: r.short, rg: r.russell_group === 'yes', x: (lon - LON0) * KX, y: (lat - LAT0) * KY });
+    }
+    const byKey = new Map();
+    for (const r of E.data) byKey.set(r.key, r);
+    const nat = new Map(N.data.map((r) => [r.key, r]));
+    const diff = new Map(V.status === 'ok' && Array.isArray(V.data) ? V.data.map((r) => [r.key, r.diff_pct]) : []);
+    const parts = d3.groups(O.data, (r) => r.part).map(([p, rows]) => ({
+      ireland: rows[0].country === 'Ireland',
+      pts: rows.map((r) => [(Number(r.lon) - LON0) * KX, (Number(r.lat) - LAT0) * KY])
+    }));
+    const subjects = Array.from(new Set(N.data.map((r) => r.subject))).sort();
+    return { camp, byKey, nat, diff, parts, subjects };
+  }
+  const rowFor = (ukprn, subject = st.subject, yag = st.yag) => idx && idx.byKey.get(ukprn + '|' + subject + '|' + yag);
+  const natFor = (subject = st.subject, yag = st.yag) => idx && idx.nat.get(subject + '|' + yag);
+
+  function targets() {
+    const t = new Map();
+    for (const c of idx.camp.values()) {
+      const r = rowFor(c.ukprn);
+      t.set(c.ukprn, r ? Number(r.median) : null);
+    }
+    return t;
+  }
+
+  // ---------- colours ----------
+  const probe = document.createElement('span');
+  probe.style.display = 'none';
+  function resolve(v) { probe.style.color = ''; probe.style.color = v; return getComputedStyle(probe).color; }
+  function readColors() {
+    $('mapbox').appendChild(probe);
+    const accent = resolve(dash.colors[0]);
+    const c = {
+      accent, muted: resolve('var(--cds-chart-muted)'), fg: resolve('var(--color-fg)'), fgMuted: resolve('var(--color-fg-muted)'),
+      bg: resolve('var(--color-bg)'), panel: resolve('var(--color-panel)'), line: resolve('var(--color-border-line)')
+    };
+    c.ramp = d3.interpolateRgb(c.muted, c.accent);
+    document.querySelector('.sm-page').style.setProperty('--sm-accent', accent);
+    return c;
+  }
+
+  // ---------- canvas & projection ----------
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  let W = 0, H = 0, DPR = 1;
+  function sizeCanvas() {
+    const box = $('mapbox');
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = box.clientWidth; H = box.clientHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  }
+  function scale() { return Math.min(W / 760, H / 860) * st.cam.zoom; }
+  function project(x, y, z) {
+    const { yaw, pitch, cx, cy } = st.cam, s = scale();
+    const dx = x - cx, dy = y - cy;
+    const cs = Math.cos(yaw), sn = Math.sin(yaw);
+    const x1 = dx * cs - dy * sn, y1 = dx * sn + dy * cs;
+    const up = y1 * Math.cos(pitch) + z * Math.sin(pitch);
+    const depth = y1 * Math.sin(pitch) - z * Math.cos(pitch);
+    const p = 2600 / (2600 + depth * Math.min(st.cam.zoom, 3));
+    return [W / 2 + x1 * s * p, H * 0.47 - up * s * p, depth, p];
+  }
+  function screenToWorldDelta(dx, dy) {
+    const s = scale(), { yaw, pitch } = st.cam;
+    const x1 = dx / s, y1 = -dy / (s * Math.max(Math.cos(pitch), 0.25));
+    const cs = Math.cos(yaw), sn = Math.sin(yaw);
+    return [x1 * cs + y1 * sn, -x1 * sn + y1 * cs];
+  }
+  const zOf = (v) => (v / PAY_TOP) * HEIGHT_KM;
+
+  // ---------- drawing ----------
+  let spikes = [];
+  let raf = 0;
+  function requestDraw() { if (!raf) raf = requestAnimationFrame(frame); }
+  function frame(now) {
+    raf = 0;
+    let more = false;
+    if (st.tween) {
+      const tw = st.tween, t = Math.min(1, (now - tw.start) / tw.dur), e = d3.easeCubicInOut(t);
+      for (const [k, to] of tw.to) {
+        const from = tw.from.get(k);
+        const a0 = from == null ? 0 : 1, a1 = to == null ? 0 : 1;
+        const v0 = from == null ? (to == null ? 0 : to * 0.02) : from;
+        const v1 = to == null ? (from == null ? 0 : from) : to;
+        st.shown.set(k, v0 + (v1 - v0) * e);
+        st.alpha.set(k, a0 + (a1 - a0) * e);
+      }
+      if (t >= 1) { st.tween = null; if (tw.done) tw.done(); } else more = true;
+    }
+    if (st.camTween) {
+      const ct = st.camTween, t = Math.min(1, (now - ct.start) / ct.dur), e = d3.easeCubicInOut(t);
+      for (const k of Object.keys(ct.to)) st.cam[k] = ct.from[k] + (ct.to[k] - ct.from[k]) * e;
+      if (t >= 1) st.camTween = null; else more = true;
+    }
+    draw();
+    if (more) requestDraw();
+  }
+
+  function draw() {
+    if (!idx || !colors) return;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    // ground
+    for (const part of idx.parts) {
+      ctx.beginPath();
+      part.pts.forEach(([x, y], i) => { const [sx, sy] = project(x, y, 0); i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); });
+      ctx.closePath();
+      ctx.fillStyle = part.ireland ? 'transparent' : colors.panel;
+      ctx.globalAlpha = 1;
+      ctx.fill();
+      ctx.strokeStyle = colors.line;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = part.ireland ? 0.55 : 1;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    // spikes
+    const natRow = natFor();
+    const natVal = natRow ? Number(natRow.median) : null;
+    spikes = [];
+    for (const c of idx.camp.values()) {
+      const v = st.shown.get(c.ukprn) || 0, a = st.alpha.get(c.ukprn) || 0;
+      const base = project(c.x, c.y, 0);
+      const top = project(c.x, c.y, zOf(v));
+      const target = rowFor(c.ukprn);
+      spikes.push({ c, v, a, base, top, depth: base[2], row: target });
+    }
+    spikes.sort((p, q) => q.depth - p.depth);
+    const z = st.cam.zoom;
+    const w = Math.max(2, Math.min(9, 2.4 * Math.sqrt(z)));
+    // base dots for everyone
+    for (const s of spikes) {
+      ctx.beginPath(); ctx.arc(s.base[0], s.base[1], 1.6, 0, 7);
+      ctx.fillStyle = colors.fgMuted; ctx.globalAlpha = 0.35; ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.lineCap = 'round';
+    for (const s of spikes) {
+      if (s.a < 0.02) continue;
+      const val = s.row ? Number(s.row.median) : s.v;
+      let col;
+      if (st.mode === 'vs' && natVal) col = val >= natVal ? colors.accent : colors.muted;
+      else col = colors.ramp(Math.max(0, Math.min(1, (s.v - 20000) / 60000)));
+      const isSel = s.c.ukprn === st.selected, isHover = st.hover === s.c.ukprn;
+      ctx.globalAlpha = s.a * (st.selected && !isSel && !isHover ? 0.82 : 1);
+      ctx.strokeStyle = col;
+      ctx.shadowColor = col;
+      ctx.shadowBlur = isSel ? 18 : 9;
+      ctx.lineWidth = isSel ? w + 2 : w;
+      ctx.beginPath(); ctx.moveTo(s.base[0], s.base[1]); ctx.lineTo(s.top[0], s.top[1]); ctx.stroke();
+      ctx.beginPath(); ctx.arc(s.top[0], s.top[1], (isSel ? w + 2 : w) * 0.85, 0, 7);
+      ctx.fillStyle = col; ctx.fill();
+      ctx.shadowBlur = 0;
+      if (isSel || isHover) {
+        ctx.beginPath(); ctx.arc(s.top[0], s.top[1], w + 5, 0, 7);
+        ctx.strokeStyle = colors.fg; ctx.lineWidth = 1.5; ctx.globalAlpha = s.a; ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    // labels: selected, hovered, and the three tallest — skipping any that would collide
+    const tallest = spikes.filter((s) => s.row && s.a > 0.5).sort((p, q) => Number(q.row.median) - Number(p.row.median)).slice(0, 3);
+    const want = [];
+    const selS = spikes.find((s) => s.c.ukprn === st.selected && s.a > 0.3);
+    const hovS = spikes.find((s) => s.c.ukprn === st.hover && s.a > 0.3);
+    if (selS) want.push(selS);
+    if (hovS && hovS !== selS) want.push(hovS);
+    for (const s of tallest) if (!want.includes(s)) want.push(s);
+    const placed = [];
+    ctx.font = '600 12px ' + getComputedStyle(document.querySelector('.sm-page')).fontFamily;
+    ctx.textBaseline = 'bottom';
+    for (const s of want) {
+      const text = s.c.short;
+      const tw = ctx.measureText(text).width;
+      let x = s.top[0] - tw / 2, y = s.top[1] - w - 8;
+      x = Math.max(6, Math.min(W - tw - 6, x)); y = Math.max(18, y);
+      const box = [x - 4, y - 16, tw + 8, 20];
+      if (placed.some((b) => !(box[0] > b[0] + b[2] || box[0] + box[2] < b[0] || box[1] > b[1] + b[3] || box[1] + box[3] < b[1]))) continue;
+      placed.push(box);
+      ctx.globalAlpha = 0.85; ctx.fillStyle = colors.bg;
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(box[0], box[1], box[2], box[3], 6) : ctx.rect(box[0], box[1], box[2], box[3]); ctx.fill();
+      ctx.globalAlpha = 1; ctx.fillStyle = colors.fg; ctx.fillText(text, x, y + 1);
+    }
+  }
+
+  // ---------- transitions ----------
+  function retarget(dur) {
+    const to = targets();
+    if (reduceMotion || !dur) {
+      for (const [k, v] of to) { st.shown.set(k, v == null ? (st.shown.get(k) || 0) : v); st.alpha.set(k, v == null ? 0 : 1); }
+      st.tween = null; requestDraw(); return;
+    }
+    const from = new Map();
+    for (const k of to.keys()) from.set(k, (st.alpha.get(k) || 0) > 0.5 ? st.shown.get(k) : null);
+    st.tween = { from, to, start: performance.now(), dur };
+    requestDraw();
+  }
+  function flyTo(target, dur = 800) {
+    if (reduceMotion) { Object.assign(st.cam, target); requestDraw(); return; }
+    const from = {}; for (const k of Object.keys(target)) from[k] = st.cam[k];
+    st.camTween = { from, to: target, start: performance.now(), dur };
+    requestDraw();
+  }
+
+  // ---------- UI: chips, selects, mode, career ----------
+  const chips = $('chips');
+  for (const [s, label] of FEATURED) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'sm-chip'; b.textContent = label; b.dataset.subject = s;
+    b.setAttribute('role', 'radio');
+    b.addEventListener('click', () => setSubject(s));
+    chips.appendChild(b);
+  }
+  $('more-subjects').addEventListener('change', (e) => { if (e.target.value) setSubject(e.target.value); });
+  $('find-uni').addEventListener('change', (e) => {
+    const u = e.target.value; if (!u) return;
+    select(u, true); e.target.value = '';
+  });
+  document.querySelectorAll('.sm-seg-btn').forEach((b) => b.addEventListener('click', () => {
+    st.mode = b.dataset.mode; syncControls(); renderLegend(); requestDraw();
+  }));
+  document.querySelectorAll('.sm-step').forEach((b) => b.addEventListener('click', () => { stopPlay(); setYag(b.dataset.yag); }));
+  $('play').addEventListener('click', () => (st.playing ? stopPlay() : play()));
+
+  function setSubject(s) { stopPlay(); st.subject = s; syncControls(); retarget(900); renderPanels(); }
+  function setYag(y, dur = 1000) { st.yag = y; syncControls(); retarget(dur); renderPanels(); }
+  let playTimer = 0;
+  function play() {
+    st.playing = true; syncPlay();
+    setYag('1', 600);
+    const seq = ['3', '5']; let i = 0;
+    const step = () => {
+      if (!st.playing) return;
+      if (i >= seq.length) { stopPlay(); return; }
+      setYag(seq[i++], 1300);
+      playTimer = setTimeout(step, 1900);
+    };
+    playTimer = setTimeout(step, 1300);
+  }
+  function stopPlay() { st.playing = false; clearTimeout(playTimer); syncPlay(); }
+  function syncPlay() {
+    $('play').setAttribute('aria-label', st.playing ? 'Pause' : 'Play career growth');
+    $('play').innerHTML = st.playing
+      ? '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" fill="currentColor"/></svg>'
+      : '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>';
+  }
+  function syncControls() {
+    chips.querySelectorAll('.sm-chip').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.subject === st.subject)));
+    const ms = $('more-subjects');
+    ms.value = FEATURED.some((f) => f[0] === st.subject) ? '' : st.subject;
+    document.querySelectorAll('.sm-seg-btn').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === st.mode)));
+    document.querySelectorAll('.sm-step').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.yag === st.yag)));
+    $('trackfill').style.width = (YAGS.indexOf(st.yag) / 2 * 100) + '%';
+  }
+  function renderLegend() {
+    const L = $('legend');
+    L.replaceChildren();
+    if (!colors) return;
+    if (st.mode === 'pay') {
+      const ramp = document.createElement('div'); ramp.className = 'sm-ramp';
+      ramp.style.background = `linear-gradient(90deg, ${colors.muted}, ${colors.accent})`;
+      const lab = document.createElement('div'); lab.className = 'sm-ramp-labels';
+      const a = document.createElement('span'); a.textContent = 'Lower pay';
+      const b = document.createElement('span'); b.textContent = 'Higher pay';
+      lab.append(a, b); L.append(ramp, lab);
+    } else {
+      for (const [col, txt] of [[colors.accent, 'Above UK median'], [colors.muted, 'Below UK median']]) {
+        const k = document.createElement('div'); k.className = 'sm-key';
+        const sw = document.createElement('span'); sw.className = 'sm-sw'; sw.style.background = col;
+        const t = document.createElement('span'); t.textContent = txt;
+        k.append(sw, t); L.append(k);
+      }
+    }
+  }
+
+  // ---------- panels ----------
+  function setMark(el, key, text) { el.dataset.where = where(key); el.textContent = text; }
+  function renderPanels() {
+    if (!idx) return;
+    const rows = [];
+    for (const c of idx.camp.values()) { const r = rowFor(c.ukprn); if (r) rows.push(r); }
+    rows.sort((a, b) => Number(b.median) - Number(a.median));
+    // takeaway
+    const lead = document.querySelector('.sm-tk-lead'), body = document.querySelector('.sm-tk-body');
+    lead.textContent = `${subjLabel(st.subject)}, ${yagText(st.yag)} after graduating:`;
+    if (rows.length > 1) {
+      const hi = rows[0], lo = rows[rows.length - 1];
+      body.hidden = false;
+      setMark($('tk-lo-val'), lo.key, gbp(Number(lo.median)));
+      setMark($('tk-lo-name'), lo.key, lo.university);
+      setMark($('tk-hi-val'), hi.key, gbp(Number(hi.median)));
+      setMark($('tk-hi-name'), hi.key, hi.university);
+    } else {
+      body.hidden = true;
+      lead.textContent += ' too few universities publish figures for this subject to compare.';
+    }
+    $('rank-title').textContent = `${subjLabel(st.subject)}: every university, highest pay first`;
+    // table
+    const tb = $('rank-body');
+    tb.replaceChildren();
+    for (const r of rows) {
+      const tr = document.createElement('tr');
+      tr.dataset.key = r.key;
+      if (String(r.ukprn) === st.selected) tr.className = 'sel';
+      const td1 = document.createElement('td'); td1.textContent = r.university;
+      const td2 = document.createElement('td'); td2.className = 'sm-r';
+      const cb = document.createElement('div'); cb.className = 'sm-cellbar';
+      const bar = document.createElement('i'); bar.style.width = Math.max(4, Number(r.median) / PAY_TOP * 64) + 'px';
+      const val = document.createElement('span'); val.textContent = gbp(Number(r.median));
+      cb.append(bar, val); td2.append(cb);
+      const td3 = document.createElement('td'); td3.className = 'sm-r';
+      const d = idx.diff.get(r.key);
+      if (d != null && d !== '') { const n = Number(d); td3.textContent = signedPct(n); td3.classList.add(n >= 0 ? 'up' : 'down'); }
+      const td4 = document.createElement('td'); td4.className = 'sm-r sm-hide-narrow';
+      td4.textContent = r.grads ? d3.format(',')(Number(r.grads)) : '';
+      tr.append(td1, td2, td3, td4);
+      tb.appendChild(tr);
+    }
+    renderInfo();
+  }
+  $('rank-body').addEventListener('click', (e) => {
+    const tr = e.target.closest('tr[data-key]'); if (!tr) return;
+    select(tr.dataset.key.split('|')[0], true);
+    document.getElementById('map').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+  });
+
+  function renderInfo() {
+    const c = st.selected && idx.camp.get(st.selected);
+    const r = c && rowFor(c.ukprn);
+    $('info-empty').hidden = !!r;
+    $('info-body').hidden = !r;
+    if (!c) return;
+    if (!r) {
+      $('info-empty').textContent = `${c.short} has no published ${subjLabel(st.subject).toLowerCase()} figures ${yagText(st.yag)} after graduating, usually because the course is too small.`;
+      return;
+    }
+    setMark($('info-name'), r.key, r.university);
+    $('info-sub').textContent = `${subjLabel(st.subject)}, ${yagText(st.yag)} after graduating${c.rg ? '. Russell Group' : ''}`;
+    setMark($('info-median'), r.key, gbp(Number(r.median)));
+    setMark($('info-lq'), r.key, r.lq ? gbp(Number(r.lq)) : '—');
+    setMark($('info-uq'), r.key, r.uq ? gbp(Number(r.uq)) : '—');
+    setMark($('info-grads'), r.key, r.grads ? d3.format(',')(Number(r.grads)) : '—');
+    const n = natFor();
+    const natEl = $('info-nat');
+    if (n) { natEl.dataset.where = where(n.key); natEl.textContent = gbp(Number(n.median)); }
+    const dEl = $('info-diff'), d = idx.diff.get(r.key);
+    dEl.dataset.where = where(r.key);
+    dEl.classList.remove('up', 'down');
+    if (d != null && d !== '') { const v = Number(d); dEl.textContent = signedPct(v); dEl.classList.add(v >= 0 ? 'up' : 'down'); } else dEl.textContent = '—';
+    // career strip
+    const strip = $('info-career'); strip.replaceChildren();
+    const vals = YAGS.map((y) => rowFor(c.ukprn, st.subject, y));
+    const max = Math.max(...vals.filter(Boolean).map((v) => Number(v.median)), 1);
+    YAGS.forEach((y, i) => {
+      const v = vals[i];
+      const col = document.createElement('div'); col.className = 'sm-cs-col' + (y === st.yag ? ' on' : '');
+      const top = document.createElement('span'); top.className = 'sm-cs-val';
+      if (v) { top.dataset.source = 'earnings'; top.dataset.field = 'median'; top.dataset.where = where(v.key); top.textContent = gbp(Number(v.median)); }
+      else top.textContent = '';
+      const bw = document.createElement('div'); bw.className = 'sm-cs-barwrap';
+      const bar = document.createElement('div'); bar.className = 'sm-cs-bar';
+      bar.style.height = v ? Math.max(4, Number(v.median) / max * 60) + 'px' : '0px';
+      bw.appendChild(bar);
+      const lb = document.createElement('span'); lb.className = 'sm-cs-lbl'; lb.textContent = yagText(y);
+      col.append(top, bw, lb); strip.appendChild(col);
+    });
+    // across-town rival: the nearest other campus within 25 km with figures for this subject
+    let best = null, bd = 25;
+    for (const o of idx.camp.values()) {
+      if (o.ukprn === c.ukprn) continue;
+      const dist = Math.hypot(o.x - c.x, o.y - c.y);
+      const orow = rowFor(o.ukprn);
+      if (orow && dist < bd) { bd = dist; best = orow; }
+    }
+    $('info-rival').hidden = !best;
+    if (best) { setMark($('rival-name'), best.key, best.university); setMark($('rival-median'), best.key, gbp(Number(best.median))); }
+  }
+
+  function select(ukprn, fly) {
+    st.selected = ukprn;
+    if (fly && idx.camp.get(ukprn)) {
+      const c = idx.camp.get(ukprn);
+      flyTo({ cx: c.x, cy: c.y, zoom: Math.max(st.cam.zoom, 5) });
+    }
+    renderPanels(); requestDraw();
+  }
+
+  // ---------- picking & tooltip ----------
+  function pick(px, py) {
+    let best = null, bd = 26;
+    for (const s of spikes) {
+      if (s.a < 0.3) continue;
+      // distance from point to the spike's segment
+      const [x1, y1] = s.base, [x2, y2] = s.top;
+      const vx = x2 - x1, vy = y2 - y1, L = vx * vx + vy * vy || 1;
+      const t = Math.max(0, Math.min(1, ((px - x1) * vx + (py - y1) * vy) / L));
+      const d = Math.hypot(px - (x1 + t * vx), py - (y1 + t * vy)) - (t > 0.9 ? 6 : 0);
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best;
+  }
+  function showTip(s, px, py) {
+    const tip = $('tip');
+    if (!s || !s.row) { tip.hidden = true; return; }
+    tip.replaceChildren();
+    const a = document.createElement('div'); a.className = 'sm-tip-name'; a.textContent = s.row.university;
+    const b = document.createElement('div'); b.className = 'sm-tip-val'; b.textContent = gbp(Number(s.row.median)) + ' median';
+    tip.append(a, b); tip.hidden = false;
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = Math.max(6, Math.min(W - tw - 6, px + 14)) + 'px';
+    tip.style.top = Math.max(6, Math.min(H - th - 6, py - th - 10)) + 'px';
+  }
+
+  // ---------- gestures ----------
+  const ptrs = new Map();
+  let gesture = null;
+  cv.addEventListener('pointerdown', (e) => {
+    cv.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+    st.camTween = null;
+    if (ptrs.size === 1) gesture = { kind: (e.shiftKey || e.button === 2) ? 'pan' : 'rotate', sx: e.offsetX, sy: e.offsetY, t: performance.now(), moved: 0 };
+    else gesture = { kind: 'pinch', moved: 99 };
+  });
+  cv.addEventListener('pointermove', (e) => {
+    const prev = ptrs.get(e.pointerId);
+    if (!prev) {
+      if (e.pointerType === 'mouse' && idx) {
+        const s = pick(e.offsetX, e.offsetY);
+        const h = s ? s.c.ukprn : null;
+        if (h !== st.hover) { st.hover = h; requestDraw(); }
+        showTip(s, e.offsetX, e.offsetY);
+      }
+      return;
+    }
+    const cur = { x: e.offsetX, y: e.offsetY };
+    if (ptrs.size === 1 && gesture) {
+      const dx = cur.x - prev.x, dy = cur.y - prev.y;
+      gesture.moved += Math.abs(dx) + Math.abs(dy);
+      if (gesture.kind === 'rotate') {
+        st.cam.yaw += dx * 0.0065;
+        st.cam.pitch = Math.max(0.05, Math.min(1.32, st.cam.pitch - dy * 0.0045));
+      } else {
+        const [wx, wy] = screenToWorldDelta(dx, dy);
+        st.cam.cx -= wx; st.cam.cy -= wy;
+      }
+    } else if (ptrs.size === 2) {
+      const ids = [...ptrs.keys()];
+      const other = ptrs.get(ids.find((i) => i !== e.pointerId));
+      const d0 = Math.hypot(prev.x - other.x, prev.y - other.y), d1 = Math.hypot(cur.x - other.x, cur.y - other.y);
+      if (d0 > 0) st.cam.zoom = Math.max(0.7, Math.min(16, st.cam.zoom * d1 / d0));
+      const [wx, wy] = screenToWorldDelta((cur.x - prev.x) / 2, (cur.y - prev.y) / 2);
+      st.cam.cx -= wx; st.cam.cy -= wy;
+    }
+    ptrs.set(e.pointerId, cur);
+    $('tip').hidden = true;
+    requestDraw();
+  });
+  const end = (e) => {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.delete(e.pointerId);
+    if (gesture && gesture.kind !== 'pinch' && ptrs.size === 0 && gesture.moved < 8 && performance.now() - gesture.t < 500) {
+      const s = pick(e.offsetX, e.offsetY);
+      if (s) { select(s.c.ukprn, false); if (e.pointerType !== 'mouse') showTip(s, e.offsetX, e.offsetY); }
+    }
+    if (ptrs.size === 0) gesture = null;
+  };
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
+  cv.addEventListener('pointerleave', () => { if (st.hover) { st.hover = null; requestDraw(); } $('tip').hidden = true; });
+  cv.addEventListener('contextmenu', (e) => e.preventDefault());
+  cv.addEventListener('wheel', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    st.cam.zoom = Math.max(0.7, Math.min(16, st.cam.zoom * Math.exp(-e.deltaY * 0.004)));
+    requestDraw();
+  }, { passive: false });
+  $('zin').addEventListener('click', () => flyTo({ zoom: Math.min(16, st.cam.zoom * 1.8) }, 350));
+  $('zout').addEventListener('click', () => flyTo({ zoom: Math.max(0.7, st.cam.zoom / 1.8) }, 350));
+  $('zreset').addEventListener('click', () => flyTo({ ...HOME }, 700));
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { colors = readColors(); renderLegend(); requestDraw(); });
+
+  syncControls(); syncPlay();
+
+  // ---------- data ----------
+  dash.calc('vs_national', {
+    inputs: ['earnings', 'national'],
+    title: 'Pay vs UK subject median',
+    description: 'Each university’s median as a percentage above or below the UK median for the same subject and years after graduating.',
+    fn: (earnings, national) => {
+      const uk = new Map(national.map((n) => [n.key, Number(n.median)]));
+      return earnings.map((e) => {
+        const n = uk.get(e.subject + '|' + e.yag);
+        return { key: e.key, diff_pct: n ? Math.round((Number(e.median) / n - 1) * 100) : null };
+      });
+    }
+  });
+
+  let lastSubjectsLen = 0, lastCampLen = 0;
+  dash.onData(() => {
+    const box = $('mapbox');
+    const statuses = ['earnings', 'campuses', 'uk_outline', 'national'].map((id) => dash.data(id).status);
+    sizeCanvas();
+    colors = readColors();
+    const fresh = build();
+    if (!fresh) {
+      if (statuses.includes('error')) box.classList.remove('dash-skeleton');
+      idx = null; ctx.clearRect(0, 0, cv.width, cv.height);
+      return;
+    }
+    box.classList.remove('dash-skeleton');
+    idx = fresh;
+    // fill selects from data
+    if (idx.subjects.length !== lastSubjectsLen) {
+      lastSubjectsLen = idx.subjects.length;
+      const ms = $('more-subjects');
+      ms.replaceChildren(new Option('Pick another subject', ''), ...idx.subjects.filter((s) => !FEATURED.some((f) => f[0] === s)).map((s) => new Option(s, s)));
+      syncControls();
+    }
+    if (idx.camp.size !== lastCampLen) {
+      lastCampLen = idx.camp.size;
+      const fu = $('find-uni');
+      const list = [...idx.camp.values()].sort((a, b) => a.short.localeCompare(b.short));
+      fu.replaceChildren(new Option('Jump to…', ''), ...list.map((c) => new Option(c.short, c.ukprn)));
+    }
+    renderLegend();
+    if (!st.introDone) {
+      st.introDone = true;
+      for (const c of idx.camp.values()) { st.shown.set(c.ukprn, 0); st.alpha.set(c.ukprn, 0); }
+      retarget(1600);
+    } else {
+      // keep targets in step with data, without replaying the intro
+      if (!st.tween) for (const [k, v] of targets()) { if (v != null) st.shown.set(k, v); st.alpha.set(k, v == null ? 0 : 1); }
+      requestDraw();
+    }
+    renderPanels();
+  });
+})();
+</script>
+
+</div>
+</body>
+</html>
